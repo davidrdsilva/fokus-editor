@@ -2,6 +2,8 @@
 
 A minimalist, distraction-free fullscreen text editor built with [Wails](https://wails.io) (Go + web frontend). The window is frameless and fullscreen, with a centered serif text column on a black background.
 
+The goal is a lightweight, easily customizable editor that runs across Linux, Windows, and macOS. It is inspired by [FocusWriter](https://gottcode.org/focuswriter/), which currently lacks an easy macOS installation path and has some long-standing unresolved issues.
+
 ## Requirements
 
 - **Go** 1.18 or later
@@ -105,8 +107,8 @@ Common tweaks live in `frontend/src/style.css`:
 
 - **Column width** — `#editor { width: 45vw; }`
 - **Font** — `font-family: "Liberation Serif", ...`
-- **Font size** — `font-size: 18px;`
-- **Line spacing** — `line-height: 1.5;`
+- **Font size** — `font-size: 25px;`
+- **Line spacing** — `line-height: 1.8;`
 - **Colors** — `background-color` on `html, body`; `color` and `caret-color` on `#editor`
 
 Window behavior (fullscreen, frameless, background color) lives in `main.go`.
