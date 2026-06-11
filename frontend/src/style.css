@@ -1,0 +1,41 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    width: 100vw;
+    background-color: #000000;
+    overflow: hidden;
+    -webkit-user-select: text;
+    user-select: text;
+    --wails-draggable: no-drag;
+}
+
+#editor {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 45vw;
+    height: 100vh;
+    background-color: transparent;
+    color: #ffffff;
+    border: none;
+    outline: none;
+    resize: none;
+    padding: 6vh 0;
+    box-sizing: border-box;
+    font-family: "Liberation Serif", "DejaVu Serif", Georgia, "Times New Roman", serif;
+    font-size: 25px;
+    line-height: 1.8;
+    caret-color: #ffffff;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+#editor::-webkit-scrollbar {
+    display: none;
+}
+
+#editor::placeholder {
+    color: #555555;
+}
