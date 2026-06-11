@@ -24,11 +24,15 @@ Because the app launches frameless/fullscreen with no close button, quit dev/bui
 
 - **`main.go`** — Wails entry point. Defines all window behavior via `options.App`: fullscreen start state, frameless, black `BackgroundColour`, and `//go:embed all:frontend/dist` to bundle the built frontend into the Go binary. Change window appearance/behavior here.
 - **`app.go`** — The `App` struct bound to the frontend via `Bind`. Holds `ctx`, a `startup` hook, and the persistence methods `SaveDocument(content)`/`LoadDocument()`, which read/write a single internal file at `<os.UserConfigDir>/fokus-editor/document.html`. Any Go method added here with an exported (capitalized) name becomes callable from JS — Wails regenerates bindings into `frontend/wailsjs/` on build/dev.
-- **`frontend/`** — `index.html` is a single `<div id="editor" contenteditable>` plus a `#status` flash element; `src/main.js` focuses the editor, swallows Escape, handles Ctrl/Cmd+S to save, and applies formatting shortcuts; `src/style.css` controls all visual styling (including `#editor h1`–`h4`). No framework.
+- **`frontend/`** — `index.html` is a single `<div id="editor" contenteditable>` plus a `#status` flash element and a `#stats` bar; `src/main.js` focuses the editor, swallows Escape, handles Ctrl/Cmd+S to save, and applies formatting and stats shortcuts; `src/style.css` controls all visual styling (including `#editor h1`–`h4`). No framework.
 
 ### Formatting
 
 The editor is a `contenteditable` div, so it holds rich markup. `main.js` keydown handler maps shortcuts via a "primary" modifier that is `ctrlKey || metaKey` (Ctrl on Linux/Windows, Cmd on macOS): **Ctrl/Cmd+B/I/U** toggle bold/italic/underline via `document.execCommand`, and **Ctrl/Cmd+Alt+1..4** set H1–H4 via `formatBlock` (toggling back to `<p>` if already that level). Inline shortcuts `preventDefault` so the webview's native handling doesn't double-toggle; headings key off `e.code` (`Digit1`…) so Alt-rewritten characters on macOS still match. `execCommand` is deprecated but is the pragmatic, universally-supported choice across WebKit (Linux/macOS) and WebView2 (Windows) for an editor this simple.
+
+### Statistics bar
+
+**Ctrl/Cmd+Alt+Space** toggles the `#stats` bar (keyed off `e.code === 'Space'` in the same Alt branch as headings). `renderStats` reads `editor.innerText` (not `textContent` — innerText inserts line breaks between block elements) to count words (`/\S+/g`), paragraphs (split on blank lines), and estimated reading time (`words / WORDS_PER_MINUTE`, 200 wpm, rounded up). While the bar is visible an `input` listener keeps it live as the user types.
 
 ### Persistence
 

@@ -2,7 +2,11 @@ import './style.css';
 
 const editor = document.getElementById('editor');
 const status = document.getElementById('status');
+const stats = document.getElementById('stats');
 editor.focus();
+
+// Average adult silent reading speed, used for the estimated reading time.
+const WORDS_PER_MINUTE = 200;
 
 // The bound Go methods are injected by the Wails runtime at startup. The
 // generated wailsjs bindings under wailsjs/go/main/App.js are just thin
@@ -134,6 +138,26 @@ function toggle(command) {
     editor.focus();
 }
 
+function plural(n, noun) {
+    return `${n} ${noun}${n === 1 ? '' : 's'}`;
+}
+
+// Recompute and render the statistics bar from the editor's rendered text.
+// innerText (not textContent) inserts line breaks between block elements, so
+// it gives accurate word counts and lets us split paragraphs on blank lines.
+function renderStats() {
+    const text = editor.innerText.trim();
+    const words = text ? text.match(/\S+/g).length : 0;
+    const paragraphs = text ? text.split(/\n+/).filter((p) => p.trim()).length : 0;
+    const minutes = words ? Math.ceil(words / WORDS_PER_MINUTE) : 0;
+    stats.textContent = `${plural(words, 'word')} · ${plural(paragraphs, 'paragraph')} · ${plural(minutes, 'min')} read`;
+}
+
+function toggleStats() {
+    const showing = stats.classList.toggle('show');
+    if (showing) renderStats();
+}
+
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         e.preventDefault();
@@ -144,9 +168,14 @@ document.addEventListener('keydown', (e) => {
     const primary = e.ctrlKey || e.metaKey;
     if (!primary) return;
 
-    // Headings: Ctrl/Cmd+Alt+1..4. Use e.code so it works even when Alt
-    // rewrites the character (e.g. Option+1 = "¡" on macOS).
+    // Ctrl/Cmd+Alt shortcuts. Key off e.code so they work even when Alt
+    // rewrites the character (e.g. Option+1 = "¡" / Option+Space on macOS).
     if (e.altKey) {
+        if (e.code === 'Space') {
+            e.preventDefault();
+            toggleStats();
+            return;
+        }
         const headings = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4 };
         if (headings[e.code]) {
             e.preventDefault();
@@ -175,6 +204,11 @@ document.addEventListener('keydown', (e) => {
             toggle('underline');
             break;
     }
+});
+
+// Keep the statistics current as the user types while the bar is visible.
+editor.addEventListener('input', () => {
+    if (stats.classList.contains('show')) renderStats();
 });
 
 loadOnStartup();
