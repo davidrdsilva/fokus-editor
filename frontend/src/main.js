@@ -230,6 +230,15 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// Force a clean paste: a contenteditable would otherwise absorb the source's
+// markup (from a PDF, web page, IDE, etc.). Strip it by inserting only the
+// clipboard's plain text, letting the editor's own styling apply uniformly.
+editor.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+    document.execCommand('insertText', false, text);
+});
+
 // Keep the statistics current as the user types while the bar is visible.
 editor.addEventListener('input', () => {
     if (stats.classList.contains('show')) renderStats();

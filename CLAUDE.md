@@ -30,6 +30,8 @@ Because the app launches frameless/fullscreen with no close button, quit dev/bui
 
 The editor is a `contenteditable` div, so it holds rich markup. `main.js` keydown handler maps shortcuts via a "primary" modifier that is `ctrlKey || metaKey` (Ctrl on Linux/Windows, Cmd on macOS): **Ctrl/Cmd+B/I/U** toggle bold/italic/underline via `document.execCommand`, and **Ctrl/Cmd+Alt+1..4** set H1–H4 via `formatBlock` (toggling back to `<p>` if already that level). Inline shortcuts `preventDefault` so the webview's native handling doesn't double-toggle; headings key off `e.code` (`Digit1`…) so Alt-rewritten characters on macOS still match. `execCommand` is deprecated but is the pragmatic, universally-supported choice across WebKit (Linux/macOS) and WebView2 (Windows) for an editor this simple.
 
+A `paste` handler forces a **clean paste**: it `preventDefault`s and inserts only the clipboard's `text/plain` via `execCommand('insertText')`, so markup from a PDF/web page/IDE never enters the `contenteditable` and the editor's own styling applies uniformly.
+
 ### Statistics bar
 
 **Ctrl/Cmd+Alt+Space** toggles the `#stats` bar (keyed off `e.code === 'Space'` in the same Alt branch as headings). `renderStats` reads `editor.innerText` (not `textContent` — innerText inserts line breaks between block elements) to count words (`/\S+/g`), paragraphs (split on blank lines), and estimated reading time (`words / WORDS_PER_MINUTE`, 200 wpm, rounded up). While the bar is visible an `input` listener keeps it live as the user types.
