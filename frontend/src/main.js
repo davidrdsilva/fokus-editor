@@ -1,4 +1,5 @@
 import './style.css';
+import { setupSidebar } from './sidebar.js';
 
 const editor = document.getElementById('editor');
 const status = document.getElementById('status');
@@ -158,15 +159,38 @@ function toggleStats() {
     if (showing) renderStats();
 }
 
+// The customization sidebar (Ctrl/Cmd+Tab). It reads/writes the appearance
+// config through the bound Go methods, falling back to no-ops in a plain
+// browser (dev devtools) where the Wails runtime is absent.
+const sidebar = setupSidebar({
+    load: async () => {
+        const app = backend();
+        return app ? app.LoadConfig() : '';
+    },
+    save: async (json) => {
+        const app = backend();
+        if (app) await app.SaveConfig(json);
+    },
+    flash,
+});
+
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         e.preventDefault();
+        sidebar.close();
         return;
     }
 
     // The primary modifier is Ctrl on Linux/Windows and Cmd on macOS.
     const primary = e.ctrlKey || e.metaKey;
     if (!primary) return;
+
+    // Ctrl/Cmd+Tab toggles the customization sidebar.
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        sidebar.toggle();
+        return;
+    }
 
     // Ctrl/Cmd+Alt shortcuts. Key off e.code so they work even when Alt
     // rewrites the character (e.g. Option+1 = "¡" / Option+Space on macOS).
