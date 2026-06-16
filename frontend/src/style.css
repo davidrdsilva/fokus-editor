@@ -243,3 +243,150 @@ html, body {
 #sidebar-save:hover {
     background-color: #3a3a3a;
 }
+
+/* Help overlay (F1) — centered modal over a dimmed backdrop. */
+#help {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease;
+    z-index: 20;
+}
+
+#help.open {
+    opacity: 1;
+    visibility: visible;
+}
+
+.help-modal {
+    position: relative;
+    width: 520px;
+    max-width: 90vw;
+    max-height: 80vh;
+    box-sizing: border-box;
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    font-family: "Liberation Serif", "DejaVu Serif", Georgia, "Times New Roman", serif;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.help-close {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: #9a9a9a;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+
+.help-close:hover {
+    color: #ffffff;
+}
+
+.help-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 16px 20px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.help-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #9a9a9a;
+    font-family: inherit;
+    font-size: 16px;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.help-tab:hover {
+    color: #e0e0e0;
+}
+
+.help-tab.active {
+    color: #ffffff;
+    border-bottom-color: #ffffff;
+}
+
+.help-body {
+    padding: 8px 24px 24px;
+    overflow-y: auto;
+}
+
+.help-panel {
+    display: none;
+}
+
+.help-panel.active {
+    display: block;
+}
+
+.help-panel h3 {
+    font-size: 14px;
+    font-weight: normal;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #9a9a9a;
+    margin: 20px 0 10px;
+}
+
+.help-panel p {
+    line-height: 1.5;
+    color: #c8c8c8;
+}
+
+/* Two-column key/description list. */
+.help-keys {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 20px;
+    margin: 0;
+}
+
+.help-keys dt {
+    font-family: "Consolas", "DejaVu Sans Mono", "Liberation Mono", monospace;
+    font-size: 14px;
+    color: #ffffff;
+    white-space: nowrap;
+}
+
+.help-keys dd {
+    margin: 0;
+    color: #c8c8c8;
+}
+
+.help-panel.about {
+    text-align: center;
+    padding-top: 24px;
+}
+
+.about-name {
+    font-size: 32px;
+    color: #ffffff;
+    margin: 8px 0 4px;
+    letter-spacing: 0.04em;
+}
+
+.about-version {
+    color: #9a9a9a;
+    margin: 0;
+}
+
+.about-author {
+    margin: 4px 0 16px;
+}

@@ -1,5 +1,6 @@
 import './style.css';
 import { setupSidebar } from './sidebar.js';
+import { setupHelp } from './help.js';
 
 const editor = document.getElementById('editor');
 const status = document.getElementById('status');
@@ -174,9 +175,19 @@ const sidebar = setupSidebar({
     flash,
 });
 
+// The help overlay (F1).
+const help = setupHelp();
+
 document.addEventListener('keydown', (e) => {
+    if (e.key === 'F1') {
+        e.preventDefault();
+        help.toggle();
+        return;
+    }
+
     if (e.key === 'Escape') {
         e.preventDefault();
+        help.close();
         sidebar.close();
         return;
     }
