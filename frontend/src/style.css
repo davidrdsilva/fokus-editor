@@ -6,6 +6,7 @@
     --bg-color: #000000;
     --text-color: #ffffff;
     --caret-color: #ffffff;
+    --font-family: "Liberation Serif", "DejaVu Serif", Georgia, "Times New Roman", serif;
     --font-size: 25px;
     --line-height: 1.8;
 }
@@ -36,7 +37,7 @@ html, body {
     padding: 6vh 0;
     box-sizing: border-box;
     overflow-y: auto;
-    font-family: "Liberation Serif", "DejaVu Serif", Georgia, "Times New Roman", serif;
+    font-family: var(--font-family);
     font-size: var(--font-size);
     line-height: var(--line-height);
     caret-color: var(--caret-color);
@@ -191,6 +192,19 @@ html, body {
     text-align: right;
     color: #c8c8c8;
     font-variant-numeric: tabular-nums;
+}
+
+/* Font dropdown. */
+.font-picker select {
+    width: 100%;
+    padding: 8px 10px;
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
 }
 
 /* Numeric sliders (font size, line height). */

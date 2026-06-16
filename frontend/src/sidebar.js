@@ -9,17 +9,20 @@ const VARS = {
     background: '--bg-color',
     text: '--text-color',
     caret: '--caret-color',
+    font: '--font-family',
     fontSize: '--font-size',
     lineHeight: '--line-height',
 };
 
-// Which settings are colors (driven by the RGB picker); the rest are sliders.
+// Which settings are colors (driven by the RGB picker); the rest are the font
+// dropdown (`font`) and numeric sliders.
 const COLOR_KEYS = ['background', 'text', 'caret'];
 
 const LABELS = {
     background: 'Background',
     text: 'Text',
     caret: 'Caret',
+    font: 'Font',
     fontSize: 'Font size',
     lineHeight: 'Line height',
 };
@@ -151,6 +154,100 @@ function createSlider({ min, max, step, unit }, value, onChange) {
     };
 }
 
+// Generic CSS families are always offered (and, unlike named fonts, are never
+// quoted when written into the font-family property).
+const GENERIC_FONTS = ['serif', 'sans-serif', 'monospace'];
+
+// Fonts commonly shipped with Windows, macOS, and Linux. Only those actually
+// installed on the running system are kept (see isFontAvailable), so the
+// dropdown reflects what the user can really use on their platform. There is no
+// cross-platform API to enumerate installed fonts (queryLocalFonts exists only
+// in Chromium/WebView2, not WebKit), hence the probe-a-known-list approach.
+const FONT_CANDIDATES = [
+    // Cross-platform / widely bundled
+    'Arial', 'Helvetica', 'Helvetica Neue', 'Verdana', 'Tahoma', 'Trebuchet MS',
+    'Times New Roman', 'Times', 'Georgia', 'Garamond', 'Palatino', 'Courier New', 'Courier',
+    // Windows
+    'Segoe UI', 'Calibri', 'Cambria', 'Consolas', 'Candara', 'Corbel', 'Constantia',
+    // macOS
+    'Avenir', 'Avenir Next', 'Optima', 'Menlo', 'Monaco', 'Geneva', 'Lucida Grande',
+    'Hoefler Text', 'Baskerville', 'American Typewriter',
+    // Linux
+    'DejaVu Sans', 'DejaVu Serif', 'DejaVu Sans Mono',
+    'Liberation Sans', 'Liberation Serif', 'Liberation Mono',
+    'Ubuntu', 'Cantarell', 'Noto Sans', 'Noto Serif', 'FreeSans', 'FreeSerif',
+];
+
+// A font is installed if it renders the sample at a different width than every
+// generic baseline: when absent, the browser falls back to the baseline and the
+// widths match. Reuses a single canvas context across calls.
+function isFontAvailable(font) {
+    const sample = 'mmmmmmmmmmlli wWQ';
+    const size = '72px';
+    const ctx = isFontAvailable._ctx ||
+        (isFontAvailable._ctx = document.createElement('canvas').getContext('2d'));
+    return ['monospace', 'sans-serif', 'serif'].some((base) => {
+        ctx.font = `${size} ${base}`;
+        const baseWidth = ctx.measureText(sample).width;
+        ctx.font = `${size} "${font}", ${base}`;
+        return ctx.measureText(sample).width !== baseWidth;
+    });
+}
+
+// First family in a CSS font-family list, unquoted (e.g. '"Georgia", serif' ->
+// 'Georgia'). Used to map a stored stack back to a single dropdown selection.
+function primaryFamily(stack) {
+    return String(stack).split(',')[0].trim().replace(/^['"]|['"]$/g, '');
+}
+
+// Wrap a chosen family for the font-family property: generics bare, names quoted.
+function toCssFamily(family) {
+    return GENERIC_FONTS.includes(family) ? family : `"${family}"`;
+}
+
+// A dropdown of the system fonts available across platforms. onChange receives
+// the chosen family as a font-family string. Each option previews in its own
+// font so the user sees what they're picking.
+function createFontPicker(value, onChange) {
+    const installed = FONT_CANDIDATES.filter((f, i, arr) => arr.indexOf(f) === i && isFontAvailable(f));
+    const options = [...GENERIC_FONTS, ...installed.sort()];
+    const current = primaryFamily(value);
+    // Keep the current font selectable even if detection missed it (e.g. the
+    // default stack's primary family isn't installed on this platform).
+    if (current && !options.includes(current)) options.unshift(current);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'font-picker';
+
+    const select = document.createElement('select');
+    for (const family of options) {
+        const opt = document.createElement('option');
+        opt.value = family;
+        opt.textContent = family;
+        opt.style.fontFamily = toCssFamily(family);
+        select.appendChild(opt);
+    }
+    select.value = current;
+    select.addEventListener('change', () => onChange(toCssFamily(select.value)));
+    wrap.appendChild(select);
+
+    return {
+        element: wrap,
+        get: () => toCssFamily(select.value),
+        set(next) {
+            const family = primaryFamily(next);
+            if (family && ![...select.options].some((o) => o.value === family)) {
+                const opt = document.createElement('option');
+                opt.value = family;
+                opt.textContent = family;
+                opt.style.fontFamily = toCssFamily(family);
+                select.appendChild(opt);
+            }
+            select.value = family;
+        },
+    };
+}
+
 // Read each setting's default straight from its CSS custom property, so the
 // "no config file" fallback is exactly what style.css declares.
 function cssDefaults() {
@@ -188,9 +285,14 @@ export function setupSidebar({ load, save, flash }) {
         label.textContent = LABELS[key];
         field.appendChild(label);
 
-        const control = COLOR_KEYS.includes(key)
-            ? createColorPicker(defaults[key], (hex) => applyOne(key, hex))
-            : createSlider(NUMERIC[key], defaults[key], (value) => applyOne(key, value));
+        let control;
+        if (COLOR_KEYS.includes(key)) {
+            control = createColorPicker(defaults[key], (hex) => applyOne(key, hex));
+        } else if (key === 'font') {
+            control = createFontPicker(defaults[key], (family) => applyOne(key, family));
+        } else {
+            control = createSlider(NUMERIC[key], defaults[key], (value) => applyOne(key, value));
+        }
 
         controls[key] = control;
         field.appendChild(control.element);
