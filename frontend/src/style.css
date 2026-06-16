@@ -99,24 +99,41 @@ html, body {
     visibility: visible;
 }
 
-/* Customization sidebar — slides in from the right above the editor. */
+/* Customization sidebar — a frosted panel sliding in from the right. Its chrome
+   is intentionally a crisp system sans, set apart from the serif writing canvas;
+   all color in the panel comes from the wheel, everything else stays grayscale. */
 #sidebar {
+    --line: rgba(255, 255, 255, 0.08);
+    --field-bg: rgba(255, 255, 255, 0.05);
+    --label: #6f6f6f;
+    --muted: #7f7f7f;
     position: fixed;
     top: 0;
     right: 0;
     width: 320px;
-    max-width: 80vw;
+    max-width: 86vw;
     height: 100vh;
     box-sizing: border-box;
-    padding: 4vh 24px;
-    background-color: rgba(20, 20, 20, 0.96);
-    color: #e0e0e0;
-    font-family: "Liberation Serif", "DejaVu Serif", Georgia, "Times New Roman", serif;
+    padding: 30px 24px 26px;
+    background-color: rgba(16, 16, 16, 0.82);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+    border-left: 1px solid var(--line);
+    color: #ededed;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Noto Sans", sans-serif;
+    font-size: 13px;
     overflow-y: auto;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    scrollbar-width: none;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
     transform: translateX(100%);
-    transition: transform 0.25s ease;
+    transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
     z-index: 10;
+}
+
+#sidebar::-webkit-scrollbar {
+    width: 0;
 }
 
 #sidebar.open {
@@ -124,124 +141,354 @@ html, body {
 }
 
 #sidebar h2 {
-    margin: 0 0 24px;
-    font-size: 20px;
-    font-weight: normal;
-    letter-spacing: 0.04em;
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
     color: #ffffff;
 }
 
-#sidebar input[type="range"] {
-    accent-color: #888888;
-    cursor: pointer;
-}
-
-.field {
-    margin-bottom: 22px;
-}
-
-.field-label {
-    display: block;
-    margin-bottom: 8px;
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #9a9a9a;
-}
-
-/* RGB color picker: swatch preview beside three channel sliders. */
-.picker {
+.section {
     display: flex;
-    gap: 12px;
-    align-items: stretch;
+    flex-direction: column;
 }
 
-.picker-swatch {
-    flex: none;
-    width: 40px;
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+.section-label {
+    margin-bottom: 16px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--label);
 }
 
-.picker-channels {
+/* Swatch selector — picks which color the shared wheel edits. */
+.colors {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.swatches {
+    display: flex;
+    gap: 10px;
+}
+
+.swatch-btn {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-}
-
-.picker-row {
-    display: flex;
-    align-items: center;
+    align-items: stretch;
     gap: 8px;
-    font-size: 12px;
-}
-
-.picker-ch {
-    width: 14px;
-    color: #9a9a9a;
-}
-
-.picker-row input[type="range"] {
-    flex: 1;
-    min-width: 0;
-}
-
-.picker-val {
-    width: 28px;
-    text-align: right;
-    color: #c8c8c8;
-    font-variant-numeric: tabular-nums;
-}
-
-/* Font dropdown. */
-.font-picker select {
-    width: 100%;
-    padding: 8px 10px;
-    background-color: #e0e0e0;
-    color: #1e1e1e;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
-    font-family: inherit;
-    font-size: 14px;
+    padding: 0;
+    background: none;
+    border: none;
     cursor: pointer;
 }
 
-/* Numeric sliders (font size, line height). */
-.slider {
+.swatch-dot {
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    transition: box-shadow 0.18s ease;
+}
+
+.swatch-name {
+    font-size: 11px;
+    text-align: center;
+    color: var(--muted);
+    transition: color 0.18s ease;
+}
+
+.swatch-btn.active .swatch-name {
+    color: #ffffff;
+}
+
+.swatch-btn.active .swatch-dot {
+    box-shadow: 0 0 0 2px #101010, 0 0 0 3.5px rgba(255, 255, 255, 0.9);
+}
+
+/* The circular HSV wheel. Hue rides the angle (conic), saturation the radius
+   (radial white falloff); the .wheel-shade child dims it to reflect value.
+   Diameter here must match WHEEL_RADIUS * 2 in sidebar.js. */
+.wheel-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 2px 0;
+}
+
+.wheel {
+    position: relative;
+    width: 184px;
+    height: 184px;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at center, #ffffff 0%, rgba(255, 255, 255, 0) 70%),
+        conic-gradient(from 90deg,
+            hsl(0, 100%, 50%), hsl(60, 100%, 50%), hsl(120, 100%, 50%),
+            hsl(180, 100%, 50%), hsl(240, 100%, 50%), hsl(300, 100%, 50%), hsl(360, 100%, 50%));
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    cursor: crosshair;
+    touch-action: none;
+}
+
+.wheel-shade {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: #000000;
+    pointer-events: none;
+}
+
+.wheel-thumb {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 1px 4px rgba(0, 0, 0, 0.6);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.value-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 12px;
+    border-radius: 7px;
+    background: linear-gradient(to right, #000000, var(--v-color, #ffffff));
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+    outline: none;
+    cursor: pointer;
+}
+
+.hex {
+    text-align: center;
+    font-family: ui-monospace, "DejaVu Sans Mono", "Consolas", monospace;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    color: #bdbdbd;
+}
+
+/* Labeled controls (font dropdown, numeric sliders). */
+.ctrl-field {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ctrl-field + .ctrl-field {
+    margin-top: 18px;
+}
+
+.ctrl-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.ctrl-label {
+    font-size: 12px;
+    color: #cacaca;
+}
+
+.ctrl-val {
+    font-family: ui-monospace, "DejaVu Sans Mono", "Consolas", monospace;
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.14);
+    outline: none;
+    cursor: pointer;
+}
+
+/* Slider thumbs (shared look across the value and numeric sliders). */
+.value-slider::-webkit-slider-thumb,
+.range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid #161616;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+    cursor: pointer;
+}
+
+.value-slider::-moz-range-thumb,
+.range::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid #161616;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+    cursor: pointer;
+}
+
+/* Custom font dropdown. */
+.dropdown {
+    position: relative;
+}
+
+.dropdown-trigger {
+    width: 100%;
+    height: 38px;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: space-between;
+    padding: 0 14px;
+    background: var(--field-bg);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 9px;
+    color: #ededed;
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.slider input[type="range"] {
-    flex: 1;
-    min-width: 0;
+.dropdown-trigger:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
-.slider-val {
-    width: 48px;
-    text-align: right;
-    color: #c8c8c8;
-    font-variant-numeric: tabular-nums;
+.dropdown.open .dropdown-trigger {
+    border-color: rgba(255, 255, 255, 0.32);
+}
+
+.dropdown-current {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.dropdown-chevron {
+    margin-left: 10px;
+    font-size: 11px;
+    color: var(--muted);
+    transition: transform 0.2s ease;
+}
+
+.dropdown.open .dropdown-chevron {
+    transform: rotate(180deg);
+}
+
+.dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: 5px;
+    list-style: none;
+    max-height: 240px;
+    overflow-y: auto;
+    background: rgba(28, 28, 30, 0.98);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 11px;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition: opacity 0.16s ease, transform 0.16s ease;
+    z-index: 5;
+}
+
+.dropdown.open .dropdown-menu {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.dropdown-item {
+    padding: 8px 12px;
+    border-radius: 7px;
+    font-size: 15px;
+    color: #cfcfcf;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dropdown-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+.dropdown-item.active {
+    color: #ffffff;
+}
+
+.dropdown-item.active::after {
+    content: '✓';
+    float: right;
+    margin-left: 12px;
+    color: #ffffff;
 }
 
 #sidebar-save {
     width: 100%;
-    margin-top: 8px;
-    padding: 10px;
-    background-color: #2a2a2a;
+    height: 42px;
+    background: var(--field-bg);
     color: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px;
     font-family: inherit;
-    font-size: 15px;
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
     cursor: pointer;
-    transition: background-color 0.15s ease;
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.1s ease;
 }
 
 #sidebar-save:hover {
-    background-color: #3a3a3a;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.24);
+}
+
+#sidebar-save:active {
+    transform: scale(0.985);
+}
+
+/* Saved/failed confirmation states. */
+#sidebar-save.saved {
+    background: #ffffff;
+    border-color: #ffffff;
+    color: #121212;
+}
+
+#sidebar-save.error {
+    background: rgba(120, 40, 40, 0.5);
+    border-color: rgba(220, 120, 120, 0.5);
+}
+
+#sidebar :focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.55);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #sidebar,
+    .dropdown-menu,
+    .dropdown-chevron,
+    #sidebar-save {
+        transition: none;
+    }
 }
 
 /* Help overlay (F1) — centered modal over a dimmed backdrop. */

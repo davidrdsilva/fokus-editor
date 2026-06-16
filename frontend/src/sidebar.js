@@ -14,27 +14,31 @@ const VARS = {
     lineHeight: '--line-height',
 };
 
-// Which settings are colors (driven by the RGB picker); the rest are the font
-// dropdown (`font`) and numeric sliders.
-const COLOR_KEYS = ['background', 'text', 'caret'];
+// The three color settings, edited through one shared color wheel.
+const COLOR_FIELDS = [
+    { key: 'background', label: 'Background' },
+    { key: 'text', label: 'Text' },
+    { key: 'caret', label: 'Caret' },
+];
 
-const LABELS = {
-    background: 'Background',
-    text: 'Text',
-    caret: 'Caret',
-    font: 'Font',
-    fontSize: 'Font size',
-    lineHeight: 'Line height',
-};
-
-// Range bounds and unit for the non-color (numeric) settings.
+// Range bounds and unit for the numeric settings.
 const NUMERIC = {
-    fontSize: { min: 14, max: 48, step: 1, unit: 'px' },
-    lineHeight: { min: 1, max: 3, step: 0.1, unit: '' },
+    fontSize: { label: 'Size', min: 14, max: 48, step: 1, unit: 'px' },
+    lineHeight: { label: 'Line height', min: 1, max: 3, step: 0.1, unit: '' },
 };
+
+// Wheel diameter; the radius constant must match the .wheel size in style.css.
+const WHEEL_RADIUS = 92;
+
+function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+}
 
 function clampByte(n) {
-    return Math.max(0, Math.min(255, n | 0));
+    return Math.max(0, Math.min(255, Math.round(n)));
 }
 
 function rgbToHex(r, g, b) {
@@ -48,93 +52,190 @@ function hexToRgb(hex) {
     return { r: (int >> 16) & 255, g: (int >> 8) & 255, b: int & 255 };
 }
 
-// The RGB color picker component: three 0–255 channel sliders with live numeric
-// readouts and a swatch preview. onChange receives the current hex on every
-// move. Returns the element plus get()/set() so the sidebar can read it back
-// for saving and seed it from a loaded config.
-function createColorPicker(hex, onChange) {
-    const channels = hexToRgb(hex);
-
-    const wrap = document.createElement('div');
-    wrap.className = 'picker';
-
-    const swatch = document.createElement('div');
-    swatch.className = 'picker-swatch';
-    wrap.appendChild(swatch);
-
-    const sliders = document.createElement('div');
-    sliders.className = 'picker-channels';
-    wrap.appendChild(sliders);
-
-    const rows = {};
-    const current = () => rgbToHex(channels.r, channels.g, channels.b);
-    const paint = () => {
-        swatch.style.backgroundColor = current();
-    };
-
-    for (const ch of ['r', 'g', 'b']) {
-        const row = document.createElement('label');
-        row.className = 'picker-row';
-
-        const name = document.createElement('span');
-        name.className = 'picker-ch';
-        name.textContent = ch.toUpperCase();
-
-        const slider = document.createElement('input');
-        slider.type = 'range';
-        slider.min = '0';
-        slider.max = '255';
-        slider.value = String(channels[ch]);
-
-        const readout = document.createElement('span');
-        readout.className = 'picker-val';
-        readout.textContent = String(channels[ch]);
-
-        slider.addEventListener('input', () => {
-            channels[ch] = Number(slider.value);
-            readout.textContent = slider.value;
-            paint();
-            onChange(current());
-        });
-
-        row.append(name, slider, readout);
-        sliders.appendChild(row);
-        rows[ch] = { slider, readout };
+// RGB <-> HSV. Hue in degrees, saturation/value in [0,1]. The wheel maps hue to
+// angle and saturation to radius; value rides a separate slider.
+function rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const d = max - min;
+    let h = 0;
+    if (d) {
+        if (max === r) h = ((g - b) / d) % 6;
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h = (h * 60 + 360) % 360;
     }
-
-    paint();
-
-    return {
-        element: wrap,
-        get: current,
-        set(nextHex) {
-            const rgb = hexToRgb(nextHex);
-            for (const ch of ['r', 'g', 'b']) {
-                channels[ch] = rgb[ch];
-                rows[ch].slider.value = String(rgb[ch]);
-                rows[ch].readout.textContent = String(rgb[ch]);
-            }
-            paint();
-        },
-    };
+    return { h, s: max ? d / max : 0, v: max };
 }
 
-// A single value slider for the numeric settings (font size, line height),
-// with a readout that includes the unit.
-function createSlider({ min, max, step, unit }, value, onChange) {
-    const wrap = document.createElement('div');
-    wrap.className = 'slider';
+function hsvToRgb(h, s, v) {
+    const c = v * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = v - c;
+    let r = 0, g = 0, b = 0;
+    if (h < 60) { r = c; g = x; }
+    else if (h < 120) { r = x; g = c; }
+    else if (h < 180) { g = c; b = x; }
+    else if (h < 240) { g = x; b = c; }
+    else if (h < 300) { r = x; b = c; }
+    else { r = c; b = x; }
+    return { r: (r + m) * 255, g: (g + m) * 255, b: (b + m) * 255 };
+}
 
-    const slider = document.createElement('input');
+// One circular HSV wheel shared by the three color settings. A swatch row picks
+// which color is being edited; the wheel + value slider edit it. `initial` maps
+// each key to its starting hex; onChange(key, hex) fires on every adjustment.
+// Returns the element plus per-key get/set handles so the sidebar's save/load
+// machinery can treat each color like any other control.
+function createColorGroup(initial, onChange) {
+    const state = {};
+    for (const { key } of COLOR_FIELDS) state[key] = initial[key];
+    // Start on Text: its default (white) shows the wheel at full vibrancy,
+    // whereas the black background default would dim the whole wheel on open.
+    let activeKey = 'text';
+    let hsv = { h: 0, s: 0, v: 0 };
+
+    const wrap = el('div', 'colors');
+
+    // Swatch selector.
+    const swatchRow = el('div', 'swatches');
+    const dots = {};
+    const buttons = {};
+    for (const { key, label } of COLOR_FIELDS) {
+        const button = el('button', 'swatch-btn');
+        button.type = 'button';
+        const dot = el('span', 'swatch-dot');
+        dot.style.backgroundColor = state[key];
+        button.append(dot, el('span', 'swatch-name', label));
+        button.addEventListener('click', () => selectKey(key));
+        swatchRow.appendChild(button);
+        dots[key] = dot;
+        buttons[key] = button;
+    }
+
+    // The wheel itself: hue ring + saturation falloff are painted in CSS; a
+    // child shade dims it to reflect value, and a thumb marks the selection.
+    const wheelWrap = el('div', 'wheel-wrap');
+    const wheel = el('div', 'wheel');
+    const shade = el('div', 'wheel-shade');
+    const thumb = el('div', 'wheel-thumb');
+    wheel.append(shade, thumb);
+    wheelWrap.appendChild(wheel);
+
+    const valueSlider = el('input', 'value-slider');
+    valueSlider.type = 'range';
+    valueSlider.min = '0';
+    valueSlider.max = '100';
+    valueSlider.setAttribute('aria-label', 'Brightness');
+
+    const hexLabel = el('span', 'hex');
+
+    wrap.append(swatchRow, wheelWrap, valueSlider, hexLabel);
+
+    const currentHex = () => {
+        const { r, g, b } = hsvToRgb(hsv.h, hsv.s, hsv.v);
+        return rgbToHex(r, g, b);
+    };
+
+    // Repaint the wheel UI from the current hsv (no onChange).
+    const refresh = () => {
+        const hex = currentHex();
+        hexLabel.textContent = hex.toUpperCase();
+        dots[activeKey].style.backgroundColor = hex;
+
+        const r = hsv.s * WHEEL_RADIUS;
+        const a = (hsv.h * Math.PI) / 180;
+        thumb.style.left = `${WHEEL_RADIUS + r * Math.cos(a)}px`;
+        thumb.style.top = `${WHEEL_RADIUS + r * Math.sin(a)}px`;
+        shade.style.opacity = String(1 - hsv.v);
+
+        const pure = hsvToRgb(hsv.h, hsv.s, 1);
+        valueSlider.style.setProperty('--v-color', rgbToHex(pure.r, pure.g, pure.b));
+    };
+
+    // Apply an edit: store it, repaint, and notify.
+    const commit = () => {
+        state[activeKey] = currentHex();
+        refresh();
+        onChange(activeKey, state[activeKey]);
+    };
+
+    // Load a color into the wheel without notifying (selection / external set).
+    const loadActive = () => {
+        const { r, g, b } = hexToRgb(state[activeKey]);
+        hsv = rgbToHsv(r, g, b);
+        valueSlider.value = String(Math.round(hsv.v * 100));
+        refresh();
+    };
+
+    const selectKey = (key) => {
+        activeKey = key;
+        for (const k of Object.keys(buttons)) buttons[k].classList.toggle('active', k === key);
+        loadActive();
+    };
+
+    // Translate a pointer position on the wheel to hue (angle) + saturation
+    // (radius), keeping value from the slider.
+    const pickFrom = (event) => {
+        const rect = wheel.getBoundingClientRect();
+        const dx = event.clientX - (rect.left + rect.width / 2);
+        const dy = event.clientY - (rect.top + rect.height / 2);
+        const radius = rect.width / 2;
+        hsv.h = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+        hsv.s = Math.min(1, Math.hypot(dx, dy) / radius);
+        commit();
+    };
+
+    const onMove = (event) => pickFrom(event);
+    wheel.addEventListener('pointerdown', (event) => {
+        wheel.setPointerCapture(event.pointerId);
+        pickFrom(event);
+        wheel.addEventListener('pointermove', onMove);
+    });
+    wheel.addEventListener('pointerup', (event) => {
+        wheel.releasePointerCapture(event.pointerId);
+        wheel.removeEventListener('pointermove', onMove);
+    });
+
+    valueSlider.addEventListener('input', () => {
+        hsv.v = Number(valueSlider.value) / 100;
+        commit();
+    });
+
+    selectKey(activeKey);
+
+    const handles = {};
+    for (const { key } of COLOR_FIELDS) {
+        handles[key] = {
+            get: () => state[key],
+            set: (hex) => {
+                state[key] = hex;
+                dots[key].style.backgroundColor = hex;
+                if (key === activeKey) loadActive();
+            },
+        };
+    }
+
+    return { element: wrap, handles };
+}
+
+// A labeled value slider for the numeric settings (font size, line height),
+// with a header showing the label and the live value (incl. unit).
+function createSlider({ label, min, max, step, unit }, value, onChange) {
+    const field = el('div', 'ctrl-field');
+
+    const head = el('div', 'ctrl-head');
+    head.appendChild(el('span', 'ctrl-label', label));
+    const readout = el('span', 'ctrl-val', value);
+    head.appendChild(readout);
+
+    const slider = el('input', 'range');
     slider.type = 'range';
     slider.min = String(min);
     slider.max = String(max);
     slider.step = String(step);
     slider.value = String(parseFloat(value));
-
-    const readout = document.createElement('span');
-    readout.className = 'slider-val';
-    readout.textContent = value;
 
     slider.addEventListener('input', () => {
         const next = slider.value + unit;
@@ -142,10 +243,10 @@ function createSlider({ min, max, step, unit }, value, onChange) {
         onChange(next);
     });
 
-    wrap.append(slider, readout);
+    field.append(head, slider);
 
     return {
-        element: wrap,
+        element: field,
         get: () => slider.value + unit,
         set(next) {
             slider.value = String(parseFloat(next));
@@ -205,45 +306,86 @@ function toCssFamily(family) {
     return GENERIC_FONTS.includes(family) ? family : `"${family}"`;
 }
 
-// A dropdown of the system fonts available across platforms. onChange receives
-// the chosen family as a font-family string. Each option previews in its own
-// font so the user sees what they're picking.
+// A custom dropdown of the system fonts available across platforms — styled to
+// match the rest of the panel, with each option previewed in its own font.
+// onChange receives the chosen family as a font-family string.
 function createFontPicker(value, onChange) {
     const installed = FONT_CANDIDATES.filter((f, i, arr) => arr.indexOf(f) === i && isFontAvailable(f));
     const options = [...GENERIC_FONTS, ...installed.sort()];
-    const current = primaryFamily(value);
-    // Keep the current font selectable even if detection missed it (e.g. the
-    // default stack's primary family isn't installed on this platform).
+    let current = primaryFamily(value);
+    // Keep the current font selectable even if detection missed it.
     if (current && !options.includes(current)) options.unshift(current);
 
-    const wrap = document.createElement('div');
-    wrap.className = 'font-picker';
+    const wrap = el('div', 'dropdown');
 
-    const select = document.createElement('select');
-    for (const family of options) {
-        const opt = document.createElement('option');
-        opt.value = family;
-        opt.textContent = family;
-        opt.style.fontFamily = toCssFamily(family);
-        select.appendChild(opt);
-    }
-    select.value = current;
-    select.addEventListener('change', () => onChange(toCssFamily(select.value)));
-    wrap.appendChild(select);
+    const trigger = el('button', 'dropdown-trigger');
+    trigger.type = 'button';
+    const currentLabel = el('span', 'dropdown-current', current);
+    currentLabel.style.fontFamily = toCssFamily(current);
+    trigger.append(currentLabel, el('span', 'dropdown-chevron', '▾'));
+
+    const menu = el('ul', 'dropdown-menu');
+    const items = {};
+    const addItem = (family) => {
+        const item = el('li', 'dropdown-item', family);
+        item.style.fontFamily = toCssFamily(family);
+        item.addEventListener('click', () => {
+            select(family);
+            closeMenu();
+        });
+        menu.appendChild(item);
+        items[family] = item;
+    };
+    options.forEach(addItem);
+
+    wrap.append(trigger, menu);
+
+    const markActive = () => {
+        for (const family of Object.keys(items)) {
+            items[family].classList.toggle('active', family === current);
+        }
+    };
+    const select = (family) => {
+        current = family;
+        currentLabel.textContent = family;
+        currentLabel.style.fontFamily = toCssFamily(family);
+        markActive();
+        onChange(toCssFamily(family));
+    };
+    const closeMenu = () => wrap.classList.remove('open');
+    const openMenu = () => {
+        wrap.classList.add('open');
+        markActive();
+        items[current]?.scrollIntoView({ block: 'nearest' });
+    };
+
+    trigger.addEventListener('click', (event) => {
+        event.stopPropagation();
+        wrap.classList.contains('open') ? closeMenu() : openMenu();
+    });
+    // Close the menu only (not the sidebar) on Escape while it's open.
+    trigger.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && wrap.classList.contains('open')) {
+            event.stopPropagation();
+            closeMenu();
+        }
+    });
+    document.addEventListener('click', (event) => {
+        if (!wrap.contains(event.target)) closeMenu();
+    });
+
+    markActive();
 
     return {
         element: wrap,
-        get: () => toCssFamily(select.value),
+        get: () => toCssFamily(current),
         set(next) {
             const family = primaryFamily(next);
-            if (family && ![...select.options].some((o) => o.value === family)) {
-                const opt = document.createElement('option');
-                opt.value = family;
-                opt.textContent = family;
-                opt.style.fontFamily = toCssFamily(family);
-                select.appendChild(opt);
-            }
-            select.value = family;
+            if (family && !items[family]) addItem(family);
+            current = family;
+            currentLabel.textContent = family;
+            currentLabel.style.fontFamily = toCssFamily(family);
+            markActive();
         },
     };
 }
@@ -259,9 +401,25 @@ function cssDefaults() {
     return out;
 }
 
+// Build a labeled field wrapper (header label + a control beneath it).
+function fieldEl(label, control) {
+    const field = el('div', 'ctrl-field');
+    const head = el('div', 'ctrl-head');
+    head.appendChild(el('span', 'ctrl-label', label));
+    field.append(head, control);
+    return field;
+}
+
+// A titled section grouping related controls.
+function sectionEl(label) {
+    const section = el('section', 'section');
+    section.appendChild(el('div', 'section-label', label));
+    return section;
+}
+
 // Build the sidebar, wire live preview + save/load, and return its controls.
 // `load`/`save` are async functions over the JSON config string; `flash` shows
-// a transient status message.
+// a transient status message (used as an error fallback).
 export function setupSidebar({ load, save, flash }) {
     const defaults = cssDefaults();
     const controls = {};
@@ -271,37 +429,35 @@ export function setupSidebar({ load, save, flash }) {
     const sidebar = document.createElement('aside');
     sidebar.id = 'sidebar';
     sidebar.setAttribute('aria-hidden', 'true');
+    sidebar.appendChild(el('h2', null, 'Customize'));
 
-    const title = document.createElement('h2');
-    title.textContent = 'Customize';
-    sidebar.appendChild(title);
+    // Color section — one shared wheel driven by three swatches.
+    const colorSection = sectionEl('Color');
+    const colorGroup = createColorGroup(
+        { background: defaults.background, text: defaults.text, caret: defaults.caret },
+        (key, hex) => applyOne(key, hex),
+    );
+    for (const { key } of COLOR_FIELDS) controls[key] = colorGroup.handles[key];
+    colorSection.appendChild(colorGroup.element);
+    sidebar.appendChild(colorSection);
 
-    for (const key of Object.keys(VARS)) {
-        const field = document.createElement('div');
-        field.className = 'field';
+    // Type section — font, size, line height.
+    const typeSection = sectionEl('Type');
 
-        const label = document.createElement('span');
-        label.className = 'field-label';
-        label.textContent = LABELS[key];
-        field.appendChild(label);
+    const fontPicker = createFontPicker(defaults.font, (family) => applyOne('font', family));
+    controls.font = fontPicker;
+    typeSection.appendChild(fieldEl('Font', fontPicker.element));
 
-        let control;
-        if (COLOR_KEYS.includes(key)) {
-            control = createColorPicker(defaults[key], (hex) => applyOne(key, hex));
-        } else if (key === 'font') {
-            control = createFontPicker(defaults[key], (family) => applyOne(key, family));
-        } else {
-            control = createSlider(NUMERIC[key], defaults[key], (value) => applyOne(key, value));
-        }
-
-        controls[key] = control;
-        field.appendChild(control.element);
-        sidebar.appendChild(field);
+    for (const key of ['fontSize', 'lineHeight']) {
+        const slider = createSlider(NUMERIC[key], defaults[key], (value) => applyOne(key, value));
+        controls[key] = slider;
+        typeSection.appendChild(slider.element);
     }
+    sidebar.appendChild(typeSection);
 
-    const saveBtn = document.createElement('button');
+    const saveBtn = el('button', null, 'Save settings');
     saveBtn.id = 'sidebar-save';
-    saveBtn.textContent = 'Save settings';
+    saveBtn.type = 'button';
     sidebar.appendChild(saveBtn);
 
     document.body.appendChild(sidebar);
@@ -321,14 +477,24 @@ export function setupSidebar({ load, save, flash }) {
         }
     };
 
+    // Confirm the save on the button itself, then return it to its resting state.
+    let savedTimer;
     saveBtn.addEventListener('click', async () => {
         try {
             await save(JSON.stringify(readControls(), null, 2));
-            flash('Settings saved');
+            saveBtn.textContent = 'Saved';
+            saveBtn.classList.add('saved');
         } catch (err) {
+            saveBtn.textContent = 'Save failed';
+            saveBtn.classList.add('error');
             flash('Save failed');
             console.error(err);
         }
+        clearTimeout(savedTimer);
+        savedTimer = setTimeout(() => {
+            saveBtn.textContent = 'Save settings';
+            saveBtn.classList.remove('saved', 'error');
+        }, 1600);
     });
 
     // Load persisted settings on startup; an absent file leaves the controls
