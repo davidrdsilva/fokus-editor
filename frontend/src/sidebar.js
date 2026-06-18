@@ -338,6 +338,46 @@ function createFontPicker(value, onChange) {
     };
     options.forEach(addItem);
 
+    // Add-a-font box pinned at the top of the menu. Since no API enumerates
+    // installed fonts on WebKit, let the user name any font directly; we probe
+    // it with the same isFontAvailable check and add it only if it really
+    // renders, so custom/just-installed fonts become selectable on the fly.
+    const customRow = el('li', 'dropdown-custom');
+    const customInput = el('input', 'dropdown-custom-input');
+    customInput.type = 'text';
+    customInput.placeholder = 'Add a font by name…';
+    customInput.setAttribute('aria-label', 'Add a font by name');
+    const customMsg = el('span', 'dropdown-custom-msg', 'Not installed — check the name');
+    const addCustom = () => {
+        const name = customInput.value.trim();
+        if (!name) return;
+        if (items[name] || isFontAvailable(name)) {
+            if (!items[name]) addItem(name);
+            select(name);
+            customInput.value = '';
+            customRow.classList.remove('not-found');
+            closeMenu();
+        } else {
+            customRow.classList.add('not-found');
+        }
+    };
+    // Keep typing (and the menu's own Escape) from reaching the global
+    // shortcut handler and the sidebar's Escape-to-close.
+    customInput.addEventListener('keydown', (event) => {
+        event.stopPropagation();
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            addCustom();
+        } else if (event.key === 'Escape') {
+            closeMenu();
+        } else {
+            customRow.classList.remove('not-found');
+        }
+    });
+    customInput.addEventListener('click', (event) => event.stopPropagation());
+    customRow.append(customInput, customMsg);
+    menu.insertBefore(customRow, menu.firstChild);
+
     wrap.append(trigger, menu);
 
     const markActive = () => {
