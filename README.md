@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="build/appicon.png" alt="fokus-editor icon" width="128">
+</p>
+
 # fokus-editor
 
 A minimalist, distraction-free fullscreen text editor built with [Wails](https://wails.io) (Go + web frontend). The window is frameless and fullscreen, with a centered serif text column on a black background.
