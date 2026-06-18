@@ -205,6 +205,11 @@ document.addEventListener('keydown', (e) => {
 
     // Ctrl/Cmd+Alt shortcuts. Key off e.code so they work even when Alt
     // rewrites the character (e.g. Option+1 = "¡" / Option+Space on macOS).
+    // The branch fires on (Ctrl OR Cmd)+Alt, but on macOS the simpler combos
+    // are reserved by the OS and never reach the webview: Cmd+Space and
+    // Cmd+Option+Space go to Spotlight/Finder. So the chord that actually works
+    // there is Ctrl+Option(+Cmd)+Space and Ctrl+Option+1..4 — which is what the
+    // F1 help shows for macOS.
     if (e.altKey) {
         if (e.code === 'Space') {
             e.preventDefault();

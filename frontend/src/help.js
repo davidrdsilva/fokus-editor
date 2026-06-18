@@ -6,14 +6,28 @@ const APP_NAME = 'Fokus';
 const APP_VERSION = '1.0.0';
 const APP_AUTHOR = 'David';
 
+// macOS uses different modifier names (and a few different chords) from
+// Linux/Windows, so the reference is built per-OS rather than hardcoded.
+const IS_MAC = /Mac|iPhone|iPad|iPod/.test(
+    (navigator.userAgentData && navigator.userAgentData.platform) ||
+    navigator.platform || '');
+
 // [keys, description] pairs, kept in sync with main.js's keydown handler.
-const SHORTCUTS = [
+const SHORTCUTS = IS_MAC ? [
     ['F1', 'Toggle this help'],
-    ['Ctrl/Cmd + S', 'Save document'],
-    ['Ctrl/Cmd + B / I / U', 'Bold / Italic / Underline'],
-    ['Ctrl/Cmd + Alt + 1…4', 'Heading levels 1–4'],
-    ['Ctrl/Cmd + Alt + Space', 'Toggle statistics bar'],
-    ['Ctrl/Cmd + Tab', 'Toggle customization sidebar'],
+    ['Cmd + S', 'Save document'],
+    ['Cmd + B / I / U', 'Bold / Italic / Underline'],
+    ['Ctrl + Option + 1…4', 'Heading levels 1–4'],
+    ['Ctrl + Option + Cmd + Space', 'Toggle statistics bar'],
+    ['Ctrl + Tab', 'Toggle customization sidebar'],
+    ['Esc', 'Close the sidebar or this help'],
+] : [
+    ['F1', 'Toggle this help'],
+    ['Ctrl + S', 'Save document'],
+    ['Ctrl + B / I / U', 'Bold / Italic / Underline'],
+    ['Ctrl + Alt + 1…4', 'Heading levels 1–4'],
+    ['Ctrl + Alt + Space', 'Toggle statistics bar'],
+    ['Ctrl + Tab', 'Toggle customization sidebar'],
     ['Esc', 'Close the sidebar or this help'],
 ];
 
@@ -39,7 +53,7 @@ function buildShortcutsPanel() {
 
     panel.appendChild(el('h3', null, 'Customization sidebar'));
     panel.appendChild(el('p', null,
-        'Press Ctrl/Cmd + Tab to open the sidebar and tailor the editor: ' +
+        'Press Ctrl + Tab to open the sidebar and tailor the editor: ' +
         'background, text and caret colors via an RGB picker, plus the font, ' +
         'font size and line height. Click Save settings to keep your choices ' +
         'between sessions.'));
