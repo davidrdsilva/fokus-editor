@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type App struct {
@@ -33,38 +35,76 @@ func appFilePath(name string) (string, error) {
 	return filepath.Join(appDir, name), nil
 }
 
-// documentPath returns the path to the single internal document file.
-func documentPath() (string, error) { return appFilePath("document.html") }
-
-// configPath returns the path to the appearance settings file, stored next to
-// the document.
+// configPath returns the path to the appearance settings file in the app's
+// config directory.
 func configPath() (string, error) { return appFilePath("config.json") }
 
-// SaveDocument persists the given compiled HTML document to the internal store,
-// overwriting any previous save.
-func (a *App) SaveDocument(content string) error {
-	path, err := documentPath()
-	if err != nil {
-		return err
-	}
+// htmlFilter is the file-type filter for the save/open dialogs. Documents are
+// self-contained HTML (see the frontend's compile/decompile).
+var htmlFilter = runtime.FileFilter{
+	DisplayName: "HTML Document (*.html)",
+	Pattern:     "*.html;*.htm",
+}
+
+// SaveDialog shows a native "save as" dialog and returns the chosen path, or an
+// empty string if the user cancels.
+func (a *App) SaveDialog(defaultName string) (string, error) {
+	home, _ := os.UserHomeDir()
+	return runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:                "Save document",
+		DefaultFilename:      defaultName,
+		DefaultDirectory:     home,
+		CanCreateDirectories: true,
+		Filters:              []runtime.FileFilter{htmlFilter},
+	})
+}
+
+// OpenDialog shows a native "open file" dialog and returns the chosen path, or
+// an empty string if the user cancels.
+func (a *App) OpenDialog() (string, error) {
+	home, _ := os.UserHomeDir()
+	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:            "Open document",
+		DefaultDirectory: home,
+		Filters: []runtime.FileFilter{
+			htmlFilter,
+			{DisplayName: "All files (*)", Pattern: "*"},
+		},
+	})
+}
+
+// WriteDocument writes the compiled HTML document to the given path.
+func (a *App) WriteDocument(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
-// LoadDocument returns the previously saved HTML document, or an empty string
-// if nothing has been saved yet.
-func (a *App) LoadDocument() (string, error) {
-	path, err := documentPath()
-	if err != nil {
-		return "", err
-	}
+// ReadDocument returns the contents of the file at the given path.
+func (a *App) ReadDocument(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
 		return "", err
 	}
 	return string(data), nil
+}
+
+// ConfirmDiscard asks the user whether to discard unsaved changes, returning
+// true only if they explicitly confirm.
+func (a *App) ConfirmDiscard() (bool, error) {
+	result, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+		Type:          runtime.QuestionDialog,
+		Title:         "Unsaved changes",
+		Message:       "Discard unsaved changes?",
+		Buttons:       []string{"Discard", "Cancel"},
+		DefaultButton: "Cancel",
+		CancelButton:  "Cancel",
+	})
+	if err != nil {
+		return false, err
+	}
+	// On Linux/GTK a QuestionDialog ignores the custom Buttons and shows native
+	// Yes/No, returning "Yes"/"No"; macOS/Windows return our own labels. Accept
+	// either affirmative.
+	return result == "Discard" || result == "Yes", nil
 }
 
 // SaveConfig persists the given appearance settings (a JSON string) to the

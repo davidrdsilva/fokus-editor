@@ -3,7 +3,7 @@
 // author. Built entirely in JS, mirroring the sidebar module.
 
 const APP_NAME = 'Fokus';
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 const APP_AUTHOR = 'David';
 
 // macOS uses different modifier names (and a few different chords) from
@@ -15,7 +15,9 @@ const IS_MAC = /Mac|iPhone|iPad|iPod/.test(
 // [keys, description] pairs, kept in sync with main.js's keydown handler.
 const SHORTCUTS = IS_MAC ? [
     ['F1', 'Toggle this help'],
-    ['Cmd + S', 'Save document'],
+    ['Cmd + N', 'New document'],
+    ['Cmd + O', 'Open document'],
+    ['Cmd + S', 'Save / Save as'],
     ['Cmd + B / I / U', 'Bold / Italic / Underline'],
     ['Ctrl + Option + 1…4', 'Heading levels 1–4'],
     ['Ctrl + Option + Cmd + Space', 'Toggle statistics bar'],
@@ -23,7 +25,9 @@ const SHORTCUTS = IS_MAC ? [
     ['Esc', 'Close the sidebar or this help'],
 ] : [
     ['F1', 'Toggle this help'],
-    ['Ctrl + S', 'Save document'],
+    ['Ctrl + N', 'New document'],
+    ['Ctrl + O', 'Open document'],
+    ['Ctrl + S', 'Save / Save as'],
     ['Ctrl + B / I / U', 'Bold / Italic / Underline'],
     ['Ctrl + Alt + 1…4', 'Heading levels 1–4'],
     ['Ctrl + Alt + Space', 'Toggle statistics bar'],

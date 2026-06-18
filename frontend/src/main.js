@@ -77,14 +77,83 @@ function flash(message) {
     flash._timer = setTimeout(() => status.classList.remove('show'), 1200);
 }
 
+// The file the editor is currently bound to (null until the document is saved
+// or opened), and whether it has unsaved edits.
+let currentPath = null;
+let dirty = false;
+
+// The current document's display name (basename), or 'Untitled' when unsaved.
+function fileLabel() {
+    return currentPath ? currentPath.split(/[\\/]/).pop() : 'Untitled';
+}
+
+// Mark the document edited and keep the stats bar (if shown) current.
+function markDirty() {
+    dirty = true;
+    refreshStats();
+}
+
+// Ask the user (via a native dialog) whether to discard unsaved edits. In a
+// plain browser (no Wails runtime) or on error, don't block.
+async function confirmDiscard() {
+    const app = backend();
+    if (!app) return true;
+    try {
+        return await app.ConfirmDiscard();
+    } catch (err) {
+        console.error(err);
+        return true;
+    }
+}
+
+// Save to the bound file, or prompt for one (save-as) the first time.
 async function save() {
     const app = backend();
     if (!app) return;
     try {
-        await app.SaveDocument(compile());
+        let path = currentPath;
+        if (!path) {
+            path = await app.SaveDialog('untitled.html');
+            if (!path) return; // cancelled
+        }
+        await app.WriteDocument(path, compile());
+        currentPath = path;
+        dirty = false;
         flash('Saved');
+        refreshStats();
     } catch (err) {
         flash('Save failed');
+        console.error(err);
+    }
+}
+
+// Start a fresh, empty document (confirming first if there are unsaved edits).
+async function newFile() {
+    if (dirty && !(await confirmDiscard())) return;
+    editor.innerHTML = '';
+    currentPath = null;
+    dirty = false;
+    caretToEnd();
+    refreshStats();
+}
+
+// Open an existing document, replacing the current one (confirming first if
+// there are unsaved edits).
+async function openFile() {
+    const app = backend();
+    if (!app) return;
+    if (dirty && !(await confirmDiscard())) return;
+    try {
+        const path = await app.OpenDialog();
+        if (!path) return; // cancelled
+        editor.innerHTML = decompile(await app.ReadDocument(path));
+        currentPath = path;
+        dirty = false;
+        caretToEnd();
+        refreshStats();
+        flash('Opened');
+    } catch (err) {
+        flash('Open failed');
         console.error(err);
     }
 }
@@ -97,20 +166,6 @@ function caretToEnd() {
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
-}
-
-async function loadOnStartup() {
-    const app = backend();
-    if (!app) return;
-    try {
-        const html = await app.LoadDocument();
-        if (html) {
-            editor.innerHTML = decompile(html);
-            caretToEnd();
-        }
-    } catch (err) {
-        console.error(err);
-    }
 }
 
 // Tag of the block element the caret currently sits in (H1–H4/P/DIV), or null.
@@ -152,7 +207,16 @@ function renderStats() {
     const words = text ? text.match(/\S+/g).length : 0;
     const paragraphs = text ? text.split(/\n+/).filter((p) => p.trim()).length : 0;
     const minutes = words ? Math.ceil(words / WORDS_PER_MINUTE) : 0;
-    stats.textContent = `${plural(words, 'word')} · ${plural(paragraphs, 'paragraph')} · ${plural(minutes, 'min')} read`;
+    // Lead with the file name (• marks unsaved edits) so the bar doubles as the
+    // only place the current document is identified in the frameless window.
+    const name = `${dirty ? '• ' : ''}${fileLabel()}`;
+    stats.textContent = `${name} · ${plural(words, 'word')} · ${plural(paragraphs, 'paragraph')} · ${plural(minutes, 'min')} read`;
+}
+
+// Refresh the stats bar only while it's visible (the filename/dirty marker can
+// change on save/open/new even when the bar is hidden).
+function refreshStats() {
+    if (stats.classList.contains('show')) renderStats();
 }
 
 function toggleStats() {
@@ -231,6 +295,14 @@ document.addEventListener('keydown', (e) => {
             e.preventDefault();
             save();
             break;
+        case 'n':
+            e.preventDefault();
+            newFile();
+            break;
+        case 'o':
+            e.preventDefault();
+            openFile();
+            break;
         case 'b':
             e.preventDefault();
             toggle('bold');
@@ -255,9 +327,7 @@ editor.addEventListener('paste', (e) => {
     document.execCommand('insertText', false, text);
 });
 
-// Keep the statistics current as the user types while the bar is visible.
+// Track unsaved edits and keep the statistics current while the bar is visible.
 editor.addEventListener('input', () => {
-    if (stats.classList.contains('show')) renderStats();
+    markDirty();
 });
-
-loadOnStartup();

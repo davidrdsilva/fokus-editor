@@ -34,7 +34,7 @@ A `paste` handler forces a **clean paste**: it `preventDefault`s and inserts onl
 
 ### Statistics bar
 
-**Ctrl/Cmd+Alt+Space** toggles the `#stats` bar (keyed off `e.code === 'Space'` in the same Alt branch as headings). `renderStats` reads `editor.innerText` (not `textContent` — innerText inserts line breaks between block elements) to count words (`/\S+/g`), paragraphs (split on blank lines), and estimated reading time (`words / WORDS_PER_MINUTE`, 200 wpm, rounded up). While the bar is visible an `input` listener keeps it live as the user types.
+**Ctrl/Cmd+Alt+Space** toggles the `#stats` bar (keyed off `e.code === 'Space'` in the same Alt branch as headings). `renderStats` leads with the current document's name (`fileLabel`, prefixed with `•` while there are unsaved edits — since the frameless window has no title bar, this is the only place the open file is identified), then reads `editor.innerText` (not `textContent` — innerText inserts line breaks between block elements) to count words (`/\S+/g`), paragraphs (split on blank lines), and estimated reading time (`words / WORDS_PER_MINUTE`, 200 wpm, rounded up). While the bar is visible an `input` listener keeps it live as the user types; `refreshStats` re-renders it after save/open/new so the name and dirty marker stay current.
 
 ### Customization sidebar
 
@@ -52,7 +52,13 @@ The **Save settings** button serializes the controls to JSON and persists via Go
 
 ### Persistence
 
-Ctrl+S (Cmd+S on macOS) saves the document. `main.js` compiles the editor's `innerHTML` verbatim into a standalone, viewable HTML document inside `<div id="content">` (sharing `DOCUMENT_STYLE` with the live editor so it renders identically standalone), and hands the string to Go's `SaveDocument`, which overwrites the single internal file. On launch, `LoadDocument` reads it back and `decompile` returns `#content`'s `innerHTML` into the editor. Documents from the original plain-text build (which used `<pre id="content">` with escaped text) are detected and converted. The Go side reads/writes the string opaquely.
+The editor is **file-based**: `main.js` tracks the bound file in `currentPath` (null until saved/opened) and a `dirty` flag (set on `input`). Documents are no longer auto-saved or auto-loaded — launching starts on an empty, unsaved buffer, and quitting without saving discards the work. Three shortcuts drive it, all on the primary modifier (Ctrl/Cmd):
+
+- **Ctrl/Cmd+S** (`save`) — compiles the editor's `innerHTML` into a standalone, viewable HTML document inside `<div id="content">` (sharing `DOCUMENT_STYLE` with the live editor so it renders identically standalone). If `currentPath` is set it writes there silently; otherwise it prompts via Go's `SaveDialog` (a native save-as) and remembers the chosen path.
+- **Ctrl/Cmd+O** (`openFile`) — prompts via Go's `OpenDialog`, reads the file with `ReadDocument`, and `decompile` returns `#content`'s `innerHTML` into the editor. Documents from the original plain-text build (which used `<pre id="content">` with escaped text) are detected and converted.
+- **Ctrl/Cmd+N** (`newFile`) — clears to an empty Untitled buffer.
+
+New/Open guard against data loss: when `dirty`, they first call Go's `ConfirmDiscard` (a native question dialog) and abort unless the user confirms. The Go methods live in `app.go`: `SaveDialog`/`OpenDialog`/`ConfirmDiscard` wrap the `wails/v2/pkg/runtime` dialogs (cancel → empty string), and `WriteDocument(path, content)`/`ReadDocument(path)` do the path-based file IO opaquely. The appearance config (`config.json` via `SaveConfig`/`LoadConfig`) still lives in the OS config dir, unaffected.
 
 ### Editing styling
 
