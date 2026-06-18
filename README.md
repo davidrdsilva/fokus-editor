@@ -2,7 +2,9 @@
   <img src="build/appicon.png" alt="fokus-editor icon" width="128">
 </p>
 
-# fokus-editor
+<h1 align="center">
+Fokus
+</h1>
 
 A minimalist, distraction-free fullscreen text editor built with [Wails](https://wails.io) (Go + web frontend). The window is frameless and fullscreen, with a centered serif text column on a black background.
 
@@ -88,6 +90,37 @@ Run the resulting binary:
 ```bash
 ./build/bin/fokus-editor
 ```
+
+## Packaging for macOS
+
+On macOS, `wails build` produces an app **bundle** (`build/bin/Fokus.app`),
+which is a folder — not a single file. To share it (e.g. on the releases page),
+wrap it in a `.dmg` so the bundle structure and permissions are preserved:
+
+```bash
+hdiutil create -volname Fokus \
+  -srcfolder build/bin/Fokus.app \
+  -ov -format UDZO build/bin/Fokus.dmg
+```
+
+> The app is **not code-signed or notarized**, so macOS Gatekeeper will block
+> it on first launch after download. See below to open it anyway. For
+> distribution to others without warnings, sign with an Apple Developer ID and
+> notarize the bundle.
+
+## Running on macOS (Gatekeeper)
+
+Because the app is unsigned, a copy downloaded from the internet is quarantined
+and macOS refuses to open it (often reporting it as "damaged"). To open it
+anyway, strip the quarantine attribute after copying `Fokus.app` to
+`/Applications` (or wherever you keep it):
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Fokus.app
+```
+
+The app then launches normally. (Right-clicking the app and choosing **Open**
+also works on some macOS versions, but the command above is the reliable fix.)
 
 ## Project Structure
 
