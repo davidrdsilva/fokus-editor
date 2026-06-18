@@ -295,6 +295,21 @@ function isFontAvailable(font) {
     });
 }
 
+// Async, more thorough availability check for a font the user typed in. The
+// canvas probe alone misses fonts WebKit hasn't loaded into the page yet — on
+// macOS that includes custom fonts the user installed but the app hasn't
+// referenced — so first nudge the Font Loading API to load it, then trust
+// document.fonts.check (accurate on WebKit) before falling back to the canvas.
+async function ensureFontAvailable(font) {
+    try {
+        await document.fonts.load(`16px "${font}"`);
+        if (document.fonts.check(`16px "${font}"`)) return true;
+    } catch (err) {
+        console.error(err);
+    }
+    return isFontAvailable(font);
+}
+
 // First family in a CSS font-family list, unquoted (e.g. '"Georgia", serif' ->
 // 'Georgia'). Used to map a stored stack back to a single dropdown selection.
 function primaryFamily(stack) {
@@ -348,10 +363,10 @@ function createFontPicker(value, onChange) {
     customInput.placeholder = 'Add a font by name…';
     customInput.setAttribute('aria-label', 'Add a font by name');
     const customMsg = el('span', 'dropdown-custom-msg', 'Not installed — check the name');
-    const addCustom = () => {
+    const addCustom = async () => {
         const name = customInput.value.trim();
         if (!name) return;
-        if (items[name] || isFontAvailable(name)) {
+        if (items[name] || await ensureFontAvailable(name)) {
             if (!items[name]) addItem(name);
             select(name);
             customInput.value = '';
