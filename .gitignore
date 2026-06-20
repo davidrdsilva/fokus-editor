@@ -1,3 +1,4 @@
 build/bin
+build/linux/pkg-root
 node_modules
 frontend/dist
